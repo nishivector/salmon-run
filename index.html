@@ -1964,7 +1964,11 @@ overlay.addEventListener('pointerdown', (e) => {
   e.stopPropagation();
   if (gameState !== 'start') return;
   initAudio().catch(() => {});
+  // Immediately hide for smoke test compatibility
+  overlay.style.opacity = '0';
+  overlay.style.pointerEvents = 'none';
   overlay.classList.add('hidden');
+  setTimeout(() => { overlay.style.display = 'none'; }, 350);
   instrOverlay.classList.add('visible');
   gameState = 'instructions';
 }, true);
