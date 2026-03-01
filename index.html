@@ -1,0 +1,1968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Salmon Run</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #3D7A52; }
+canvas#gameCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+canvas#hudCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+#overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(28, 53, 32, 0.85);
+  z-index: 10;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+}
+#overlay.hidden { opacity: 0; pointer-events: none; }
+#instrOverlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(28, 53, 32, 0.92);
+  z-index: 9;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+#instrOverlay.visible { opacity: 1; pointer-events: all; }
+.tap-prompt {
+  color: #F5EDD6;
+  font-family: Georgia, serif;
+  font-size: clamp(14px, 3vw, 22px);
+  opacity: 0.8;
+  animation: pulse 1.5s ease-in-out infinite;
+  margin-top: 20px;
+  letter-spacing: 0.08em;
+}
+@keyframes pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+.instr-box {
+  background: rgba(61,122,82,0.5);
+  border: 1px solid rgba(245,237,214,0.3);
+  border-radius: 12px;
+  padding: clamp(16px,4vw,32px);
+  max-width: min(480px, 90vw);
+  color: #F5EDD6;
+  font-family: Georgia, serif;
+}
+.instr-box h2 {
+  font-size: clamp(16px,4vw,26px);
+  margin-bottom: 12px;
+  text-align: center;
+  color: #F0A500;
+}
+.instr-box p {
+  font-size: clamp(13px,2.5vw,17px);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.instr-box .key {
+  display: inline-block;
+  background: rgba(245,237,214,0.2);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-weight: bold;
+  color: #F0A500;
+}
+</style>
+<!-- Tone.js FIRST -->
+<script src="https://cdn.jsdelivr.net/npm/tone@15.1.22/build/Tone.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.183.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<!-- HUD Canvas (behind overlay, above game) -->
+<canvas id="hudCanvas"></canvas>
+
+<!-- Start Screen -->
+<div id="overlay">
+  <svg width="320" height="160" viewBox="0 0 320 160" style="overflow:visible;margin-bottom:10px">
+    <defs>
+      <filter id="glow-inner">
+        <feGaussianBlur stdDeviation="3" result="blur1"/>
+        <feFlood flood-color="#F0A500" flood-opacity="0.9" result="color1"/>
+        <feComposite in="color1" in2="blur1" operator="in" result="glow1"/>
+        <feMerge><feMergeNode in="glow1"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glow-outer">
+        <feGaussianBlur stdDeviation="12" result="blur2"/>
+        <feFlood flood-color="#3D7A52" flood-opacity="0.5" result="color2"/>
+        <feComposite in="color2" in2="blur2" operator="in" result="glow2"/>
+        <feMerge><feMergeNode in="glow2"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="icon-shadow">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#1C3520" flood-opacity="0.4"/>
+      </filter>
+    </defs>
+    <!-- Gary Icon (Option B) -->
+    <g id="gary-icon" fill="#C0392B" filter="url(#icon-shadow)" transform="translate(160,28) scale(1.0)">
+      <ellipse cx="0" cy="0" rx="38" ry="14"/>
+      <ellipse cx="-34" cy="-2" rx="12" ry="10"/>
+      <rect x="-50" y="1" width="10" height="5" rx="2" transform="rotate(-8,-45,3)"/>
+      <path d="M 35 -8 L 55 -18 L 51 0 L 55 18 L 35 8 Z"/>
+      <polygon points="-5,-14 5,-14 0,-22"/>
+      <circle cx="-38" cy="-4" r="3" fill="#2C1A0E"/>
+    </g>
+    <!-- Title with animated glow -->
+    <text id="title-outer" x="160" y="90" text-anchor="middle"
+      font-family="Georgia, 'Libre Baskerville', serif" font-size="48" font-weight="bold"
+      fill="#F5EDD6" letter-spacing="4" filter="url(#glow-outer)"
+      style="animation: outerPulse 3s ease-in-out infinite">SALMON RUN</text>
+    <text id="title-inner" x="160" y="90" text-anchor="middle"
+      font-family="Georgia, 'Libre Baskerville', serif" font-size="48" font-weight="bold"
+      fill="#F5EDD6" letter-spacing="4" filter="url(#glow-inner)"
+      style="animation: innerPulse 2.4s ease-in-out infinite">SALMON RUN</text>
+    <!-- Tagline -->
+    <text x="160" y="118" text-anchor="middle"
+      font-family="Georgia, serif" font-size="11" fill="#F5EDD6" opacity="0.7"
+      letter-spacing="2">HE WAS NOT BUILT FOR THIS. HE WILL DO IT ANYWAY.</text>
+  </svg>
+  <style>
+    @keyframes outerPulse { 0%,100%{opacity:0.3} 50%{opacity:0.6} }
+    @keyframes innerPulse { 0%,100%{opacity:0.7} 50%{opacity:0.9} }
+  </style>
+  <div class="tap-prompt">TAP TO BEGIN</div>
+</div>
+
+<!-- Instructions Screen -->
+<div id="instrOverlay">
+  <div class="instr-box">
+    <h2>🐟 HOW TO SWIM</h2>
+    <p><span class="key">TAP LEFT</span> — Switch one lane left</p>
+    <p><span class="key">TAP RIGHT</span> — Switch one lane right</p>
+    <p><span class="key">HOLD</span> — Charge waterfall leap (300ms min, 800–1000ms perfect)</p>
+    <p style="margin-top:12px;color:#F0A500">Survive 5 levels of rapids, bears, and fishing lines to reach the spawning grounds.</p>
+    <p style="margin-top:12px;opacity:0.7">Gary has 3 ❤️ — he's not built for this, but he will do it anyway.</p>
+  </div>
+  <div class="tap-prompt" style="margin-top:24px">TAP TO SWIM</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const LANE_COUNT = 3;
+const GARY_X_FRAC = 0.28;
+const LANE_SWITCH_MS = 180;
+const CHARGE_MIN = 300;
+const CHARGE_OPTIMAL_MIN = 800;
+const CHARGE_OPTIMAL_MAX = 1000;
+const CHARGE_MAX = 1200;
+const BLOOM_STRENGTH = 0.4;
+const BLOOM_THRESHOLD = 0.72;
+const BLOOM_RADIUS = 0.3;
+
+// Difficulty table indexed by level (1-5)
+const LEVEL_CONFIG = {
+  1: { speed: 280, boulderInterval: 3500, bearActive: false, fishingActive: false, distance: 800, waterfallDist: [600] },
+  2: { speed: 320, boulderInterval: 2800, bearActive: false, fishingActive: false, distance: 900, waterfallDist: [400, 750] },
+  3: { speed: 360, boulderInterval: 2200, bearActive: true,  fishingActive: false, distance: 950, waterfallDist: [300, 650] },
+  4: { speed: 400, boulderInterval: 1800, bearActive: true,  fishingActive: true,  distance: 1000, waterfallDist: [250, 550, 800] },
+  5: { speed: 460, boulderInterval: 1400, bearActive: true,  fishingActive: true,  distance: 1100, waterfallDist: [150, 320, 500, 680, 860] },
+};
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let gameState = 'start'; // start | instructions | playing | dead | win
+let hasEverActed = false;
+
+// Gary state
+let gary = {
+  lane: 1, // 0=left, 1=center, 2=right
+  targetLane: 1,
+  laneProgress: 1.0,
+  laneFrom: 1,
+  hp: 3,
+  invincible: false,
+  invincibleTimer: 0,
+  animTime: 0,
+  bobPhase: 0,
+  chargeStart: null,
+  charging: false,
+  jumping: false,
+  jumpProgress: 0,
+  dead: false,
+  deathTimer: 0,
+  wiggleAnim: 0,
+  hitFlash: 0,
+};
+
+// World state
+let world = {
+  scrollX: 0,
+  distance: 0,
+  level: 1,
+  levelDistance: 0,
+  score: 0,
+  boulderTimer: 0,
+  bearCooldown: 0,
+  fishingTimer: 0,
+  waterfallWarningActive: false,
+  waterfallWarningTimer: 0,
+  waterfallX: null,
+  obstacles: [],
+  bearState: 'idle', // idle | roaring | swiping | cooldown
+  bearRoarTimer: 0,
+  bearSwipeTimer: 0,
+  bearTargetLane: -1,
+  leaveFallParticles: [],
+  foamParticles: [],
+  causticPhase: 0,
+  meterTraveled: 0,
+  nextWaterfallAt: -1,
+  levelComplete: false,
+  levelCompleteTimer: 0,
+};
+
+// ─── RENDERER SETUP ──────────────────────────────────────────────────────────
+const canvas = document.createElement('canvas');
+canvas.id = 'gameCanvas';
+canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;';
+document.body.insertBefore(canvas, document.body.firstChild);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x3D7A52);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
+camera.position.z = 5;
+
+let W = window.innerWidth, H = window.innerHeight;
+let aspect = W / H;
+
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  aspect = W / H;
+  renderer.setSize(W, H);
+  composer.setSize(W, H);
+  hudCanvas.width = W; hudCanvas.height = H;
+  camera.left = -aspect; camera.right = aspect;
+  camera.top = 1; camera.bottom = -1;
+  camera.updateProjectionMatrix();
+  buildScene();
+}
+
+// Post-processing
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(W, H), BLOOM_STRENGTH, BLOOM_RADIUS, BLOOM_THRESHOLD
+);
+composer.addPass(bloomPass);
+
+// HUD canvas
+const hudCanvas = document.getElementById('hudCanvas');
+const hud = hudCanvas.getContext('2d');
+hudCanvas.width = W; hudCanvas.height = H;
+
+// ─── SCENE OBJECTS ───────────────────────────────────────────────────────────
+// We use instanced / grouped meshes for efficiency
+let bgGroup, waterGroup, garyMesh, garyGroup;
+let bgForest1, bgForest2, bgAutumn, waterSurface;
+let rippleLines = [], foamMeshes = [];
+let causticMesh;
+let obstacleGroup;
+let bearGroup;
+let mists = [];
+
+function laneY(laneIdx) {
+  // lanes occupy center 60% of screen height
+  // in NDC: -0.3 to 0.3
+  const top = 0.25, bot = -0.25;
+  const step = (top - bot) / (LANE_COUNT - 1);
+  return bot + laneIdx * step; // lane 0=bottom, 1=mid, 2=top... reorder: 0=top, 1=mid, 2=bot
+  // Actually: lane 0=left channel, shown at different Y in side-scroll
+}
+
+// Gary's lane in world Y space (side scroller, so lanes are vertical positions)
+function laneWorldY(laneIdx) {
+  // side-scroller: 3 horizontal lanes (top/mid/bot of screen)
+  // lane 0 = top of play area, 1 = middle, 2 = bottom
+  const playTop = 0.28, playBot = -0.28;
+  const t = laneIdx / (LANE_COUNT - 1);
+  return playTop - t * (playTop - playBot);
+}
+
+function buildScene() {
+  scene.clear();
+  const a = aspect;
+
+  // Background gradient - river base
+  {
+    const geo = new THREE.PlaneGeometry(a * 2, 2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x3D7A52 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.z = -5;
+    scene.add(mesh);
+  }
+
+  // Deep water shadow at bottom
+  {
+    const geo = new THREE.PlaneGeometry(a * 2, 0.5);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x2A5C3F });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0, -0.75, -4.8);
+    scene.add(mesh);
+  }
+
+  // Background forest silhouette (far, slow parallax)
+  bgForest1 = buildForestLayer(a, 0.65, 0.20, 0x1C3520, -4);
+  bgForest2 = buildForestLayer(a, 0.5, 0.15, 0x2D5C34, -3.8);
+  scene.add(bgForest1);
+  scene.add(bgForest2);
+
+  // Autumn canopy layer
+  bgAutumn = buildAutumnLayer(a, -3.5);
+  scene.add(bgAutumn);
+
+  // Caustic light pattern
+  causticMesh = buildCausticMesh(a);
+  causticMesh.position.z = -3;
+  scene.add(causticMesh);
+
+  // Lane foam lines
+  for (let i = 0; i < 2; i++) {
+    const yPos = laneWorldY(i) - (laneWorldY(i) - laneWorldY(i+1)) / 2;
+    const geo = new THREE.PlaneGeometry(a * 2, 0.004);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x7EC49A, transparent: true, opacity: 0.22 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0, yPos, -2.5);
+    scene.add(mesh);
+  }
+
+  // Water ripple lines (horizontal scrolling)
+  rippleLines = [];
+  for (let i = 0; i < 12; i++) {
+    const y = -0.9 + i * 0.16;
+    const w = 0.15 + Math.random() * 0.25;
+    const x = (Math.random() - 0.5) * a * 2;
+    const geo = new THREE.PlaneGeometry(w, 0.003);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25 + Math.random() * 0.15 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, -2.3);
+    mesh.userData = { speed: 1.3, phase: Math.random() * Math.PI * 2, baseY: y };
+    rippleLines.push(mesh);
+    scene.add(mesh);
+  }
+
+  // Gary group
+  garyGroup = new THREE.Group();
+  garyGroup.position.z = 0;
+  buildGarySprite(garyGroup);
+  scene.add(garyGroup);
+
+  // Obstacle group
+  obstacleGroup = new THREE.Group();
+  obstacleGroup.position.z = -1;
+  scene.add(obstacleGroup);
+
+  // Bear group
+  bearGroup = buildBearGroup();
+  bearGroup.position.set(a * 0.88, laneWorldY(2), -1.5);
+  bearGroup.visible = false;
+  scene.add(bearGroup);
+
+  // Mist (waterfall warning)
+  mists = [];
+  for (let m = 0; m < 3; m++) {
+    const geo = new THREE.PlaneGeometry(0.15, 0.6);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(a, -0.15 + m * 0.15, -1.8);
+    mists.push(mesh);
+    scene.add(mesh);
+  }
+}
+
+function buildForestLayer(a, topY, height, color, z) {
+  const group = new THREE.Group();
+  const treeCount = 20;
+  for (let i = 0; i < treeCount; i++) {
+    const x = -a + (i / treeCount) * a * 2 + (Math.random() - 0.5) * 0.2;
+    const h = height * (0.7 + Math.random() * 0.6);
+    const w = 0.06 + Math.random() * 0.08;
+    const geo = new THREE.PlaneGeometry(w, h);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, topY - h / 2, z);
+    group.add(mesh);
+  }
+  return group;
+}
+
+function buildAutumnLayer(a, z) {
+  const group = new THREE.Group();
+  const count = 15;
+  for (let i = 0; i < count; i++) {
+    const x = -a + (i / count) * a * 2;
+    const h = 0.18 + Math.random() * 0.12;
+    const w = 0.14 + Math.random() * 0.1;
+    const color = Math.random() > 0.5 ? 0xD4831A : 0xC4692A;
+    const geo = new THREE.PlaneGeometry(w, h);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, 0.85 + h / 2, z);
+    group.add(mesh);
+  }
+  return group;
+}
+
+function buildCausticMesh(a) {
+  const geo = new THREE.PlaneGeometry(a * 2, 2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x7EC49A, transparent: true, opacity: 0.06 });
+  return new THREE.Mesh(geo, mat);
+}
+
+function buildGarySprite(group) {
+  // Body - main ellipse (salmon red)
+  const bodyGeo = new THREE.EllipseCurve(0, 0, 0.09, 0.032, 0, Math.PI * 2, false);
+  const bodyPts = bodyGeo.getPoints(32);
+  const bodyShape = new THREE.Shape(bodyPts);
+  const bodyGeoMesh = new THREE.ShapeGeometry(bodyShape);
+  const bodyMat = new THREE.MeshBasicMaterial({ color: 0xC0392B });
+  const bodyMesh = new THREE.Mesh(bodyGeoMesh, bodyMat);
+  bodyMesh.name = 'body';
+  group.add(bodyMesh);
+
+  // Belly (lighter) - lower half ellipse
+  const bellyShape = new THREE.Shape();
+  bellyShape.ellipse(0.01, -0.005, 0.07, 0.018, 0, Math.PI * 2, false);
+  const bellyGeo = new THREE.ShapeGeometry(bellyShape);
+  const bellyMat = new THREE.MeshBasicMaterial({ color: 0xE8B4A0 });
+  const bellyMesh = new THREE.Mesh(bellyGeo, bellyMat);
+  bellyMesh.position.z = 0.01;
+  bellyMesh.name = 'belly';
+  group.add(bellyMesh);
+
+  // Head bump
+  const headShape = new THREE.Shape();
+  headShape.ellipse(-0.075, 0, 0.025, 0.028, 0, Math.PI * 2, false);
+  const headGeo = new THREE.ShapeGeometry(headShape);
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xC0392B });
+  const headMesh = new THREE.Mesh(headGeo, headMat);
+  headMesh.position.z = 0.005;
+  headMesh.name = 'head';
+  group.add(headMesh);
+
+  // Tail (forked)
+  const tailShape = new THREE.Shape();
+  tailShape.moveTo(0.072, 0);
+  tailShape.lineTo(0.115, -0.04);
+  tailShape.lineTo(0.105, 0);
+  tailShape.lineTo(0.115, 0.04);
+  tailShape.lineTo(0.072, 0);
+  const tailGeo = new THREE.ShapeGeometry(tailShape);
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0xA93226 });
+  const tailMesh = new THREE.Mesh(tailGeo, tailMat);
+  tailMesh.name = 'tail';
+  group.add(tailMesh);
+
+  // Dorsal fin
+  const dorsalShape = new THREE.Shape();
+  dorsalShape.moveTo(-0.01, 0.032);
+  dorsalShape.lineTo(0.03, 0.032);
+  dorsalShape.lineTo(0.01, 0.064);
+  dorsalShape.lineTo(-0.01, 0.032);
+  const dorsalGeo = new THREE.ShapeGeometry(dorsalShape);
+  const dorsalMat = new THREE.MeshBasicMaterial({ color: 0xA93226 });
+  const dorsalMesh = new THREE.Mesh(dorsalGeo, dorsalMat);
+  dorsalMesh.name = 'dorsal';
+  dorsalMesh.position.z = 0.01;
+  group.add(dorsalMesh);
+
+  // Eye - white sclera
+  const eyeShape = new THREE.Shape();
+  eyeShape.ellipse(-0.07, 0.008, 0.012, 0.01, 0, Math.PI * 2, false);
+  const eyeGeo = new THREE.ShapeGeometry(eyeShape);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xF5F0E0 });
+  const eyeMesh = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeMesh.position.z = 0.02;
+  eyeMesh.name = 'eyeWhite';
+  group.add(eyeMesh);
+
+  // Eye - pupil
+  const pupilShape = new THREE.Shape();
+  pupilShape.ellipse(-0.069, 0.009, 0.006, 0.006, 0, Math.PI * 2, false);
+  const pupilGeo = new THREE.ShapeGeometry(pupilShape);
+  const pupilMat = new THREE.MeshBasicMaterial({ color: 0x2C1A0E });
+  const pupilMesh = new THREE.Mesh(pupilGeo, pupilMat);
+  pupilMesh.position.z = 0.03;
+  pupilMesh.name = 'pupil';
+  group.add(pupilMesh);
+
+  // Eye specular (bloom target)
+  const specShape = new THREE.Shape();
+  specShape.ellipse(-0.066, 0.013, 0.003, 0.003, 0, Math.PI * 2, false);
+  const specGeo = new THREE.ShapeGeometry(specShape);
+  const specMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const specMesh = new THREE.Mesh(specGeo, specMat);
+  specMesh.position.z = 0.04;
+  group.add(specMesh);
+
+  // Lateral stripe
+  const stripeGeo = new THREE.PlaneGeometry(0.14, 0.004);
+  const stripeMat = new THREE.MeshBasicMaterial({ color: 0x8B1A1A });
+  const stripeMesh = new THREE.Mesh(stripeGeo, stripeMat);
+  stripeMesh.position.set(0.0, 0.0, 0.015);
+  stripeMesh.name = 'stripe';
+  group.add(stripeMesh);
+
+  // Pectoral fin left
+  const pecShape = new THREE.Shape();
+  pecShape.moveTo(-0.05, -0.01);
+  pecShape.lineTo(-0.035, -0.035);
+  pecShape.lineTo(-0.02, -0.012);
+  pecShape.lineTo(-0.05, -0.01);
+  const pecGeo = new THREE.ShapeGeometry(pecShape);
+  const pecMat = new THREE.MeshBasicMaterial({ color: 0xA93226, transparent: true, opacity: 0.85 });
+  const pecMesh = new THREE.Mesh(pecGeo, pecMat);
+  pecMesh.name = 'pectoral';
+  pecMesh.position.z = 0.008;
+  group.add(pecMesh);
+}
+
+function buildBearGroup() {
+  const group = new THREE.Group();
+  // Bear body
+  const bodyShape = new THREE.Shape();
+  bodyShape.ellipse(0, 0.04, 0.055, 0.09, 0, Math.PI * 2, false);
+  const bodyGeo = new THREE.ShapeGeometry(bodyShape);
+  const bodyMat = new THREE.MeshBasicMaterial({ color: 0x3D2B1F });
+  group.add(new THREE.Mesh(bodyGeo, bodyMat));
+
+  // Head
+  const headShape = new THREE.Shape();
+  headShape.ellipse(0, 0.145, 0.038, 0.038, 0, Math.PI * 2, false);
+  const headGeo = new THREE.ShapeGeometry(headShape);
+  const headMat = new THREE.MeshBasicMaterial({ color: 0x3D2B1F });
+  const headMesh = new THREE.Mesh(headGeo, headMat);
+  headMesh.name = 'bearHead';
+  group.add(headMesh);
+
+  // Rim highlight on body
+  const rimShape = new THREE.Shape();
+  rimShape.ellipse(-0.01, 0.04, 0.045, 0.078, 0, Math.PI * 2, false);
+  const rimGeo = new THREE.ShapeGeometry(rimShape);
+  const rimMat = new THREE.MeshBasicMaterial({ color: 0x6B4C38, transparent: true, opacity: 0.5 });
+  const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+  rimMesh.position.z = 0.005;
+  group.add(rimMesh);
+
+  // Bear paw (separate, positioned)
+  const pawGroup = new THREE.Group();
+  pawGroup.name = 'pawGroup';
+  const pawShape = new THREE.Shape();
+  pawShape.ellipse(0, 0, 0.05, 0.035, 0, Math.PI * 2, false);
+  const pawGeo = new THREE.ShapeGeometry(pawShape);
+  const pawMat = new THREE.MeshBasicMaterial({ color: 0x3D2B1F });
+  pawGroup.add(new THREE.Mesh(pawGeo, pawMat));
+  pawGroup.visible = false;
+  pawGroup.position.set(-0.08, -0.05, 0.1);
+  group.add(pawGroup);
+
+  return group;
+}
+
+function buildBoulder(laneIdx) {
+  const group = new THREE.Group();
+  const y = laneWorldY(laneIdx);
+  group.userData = { lane: laneIdx, type: 'boulder', scored: false };
+
+  // Main rock body
+  const shape = new THREE.Shape();
+  const rx = 0.052, ry = 0.042;
+  shape.ellipse(0, 0, rx, ry, 0, Math.PI * 2, false);
+  const geo = new THREE.ShapeGeometry(shape);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x5C5248 });
+  group.add(new THREE.Mesh(geo, mat));
+
+  // Highlight
+  const hlShape = new THREE.Shape();
+  hlShape.ellipse(-0.01, 0.01, 0.028, 0.022, 0, Math.PI * 2, false);
+  const hlGeo = new THREE.ShapeGeometry(hlShape);
+  const hlMat = new THREE.MeshBasicMaterial({ color: 0x8A7E76 });
+  const hlMesh = new THREE.Mesh(hlGeo, hlMat);
+  hlMesh.position.z = 0.01;
+  group.add(hlMesh);
+
+  // Foam halo (bloom)
+  const foamShape = new THREE.Shape();
+  foamShape.ellipse(0, 0, rx * 1.5, ry * 1.3, 0, Math.PI * 2, false);
+  const foamGeo = new THREE.ShapeGeometry(foamShape);
+  const foamMat = new THREE.MeshBasicMaterial({ color: 0x7EC49A, transparent: true, opacity: 0.18 });
+  const foamMesh = new THREE.Mesh(foamGeo, foamMat);
+  foamMesh.position.z = -0.01;
+  group.add(foamMesh);
+
+  // Warning ripple V
+  const ripGeo = new THREE.PlaneGeometry(0.07, 0.01);
+  const ripMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.0 });
+  const ripMesh = new THREE.Mesh(ripGeo, ripMat);
+  ripMesh.position.set(0.1, 0, 0.02);
+  ripMesh.name = 'warning';
+  group.add(ripMesh);
+
+  group.position.set(aspect + 0.12, y, 0);
+  return group;
+}
+
+function buildFishingLine(safeLane) {
+  const group = new THREE.Group();
+  group.userData = { type: 'fishing', safeLane, scored: false };
+
+  const a = aspect;
+  // The line covers 2 of 3 lanes (not the safe lane)
+  // Visual: thin near-invisible line across screen
+  const lineGeo = new THREE.PlaneGeometry(a * 2, 0.003);
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0xD4D0C8, transparent: true, opacity: 0.45 });
+  const lineMesh = new THREE.Mesh(lineGeo, lineMat);
+  lineMesh.position.set(0, 0, 0.05);
+  group.add(lineMesh);
+
+  // Lure (visible marker) - on non-safe side
+  const lureY = laneWorldY(safeLane === 0 ? 2 : 0);
+  const lureShape = new THREE.Shape();
+  lureShape.ellipse(0, 0, 0.018, 0.01, 0, Math.PI * 2, false);
+  const lureGeo = new THREE.ShapeGeometry(lureShape);
+  const lureMat = new THREE.MeshBasicMaterial({ color: 0xE8C84A });
+  const lureMesh = new THREE.Mesh(lureGeo, lureMat);
+  lureMesh.position.set(0.12, lureY, 0.08);
+  lureMesh.name = 'lure';
+  group.add(lureMesh);
+
+  group.userData.lureBase = lureY;
+  group.userData.lurePhase = Math.random() * Math.PI * 2;
+
+  group.position.set(a + 0.05, 0, 0.1);
+  return group;
+}
+
+function buildBearPawEffect(targetLane) {
+  const group = new THREE.Group();
+  group.userData = { type: 'bearPaw', targetLane };
+  const y = laneWorldY(targetLane);
+
+  const shadowShape = new THREE.Shape();
+  shadowShape.ellipse(0, y, 0.12, 0.06, 0, Math.PI * 2, false);
+  const shadowGeo = new THREE.ShapeGeometry(shadowShape);
+  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x1C1008, transparent: true, opacity: 0.0 });
+  const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+  shadowMesh.name = 'shadow';
+  shadowMesh.position.z = 0.05;
+  group.add(shadowMesh);
+
+  group.position.set(aspect * 1.3, 0, 0.2);
+  return group;
+}
+
+buildScene();
+
+// ─── AUDIO ───────────────────────────────────────────────────────────────────
+let audioInit = false;
+let kick, snare, timpani, bass, horn, strings, piccolo, tubaSynth;
+let waterNoise, chargeNoise;
+let reverb;
+
+async function initAudio() {
+  if (audioInit) return;
+  audioInit = true;
+  await Tone.start();
+
+  reverb = new Tone.Reverb({ decay: 2.0, wet: 0.3 }).toDestination();
+
+  // Kick
+  kick = new Tone.MembraneSynth({
+    pitchDecay: 0.4, octaves: 4,
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.1 }
+  }).toDestination();
+
+  // Snare
+  snare = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.01, decay: 0.15, sustain: 0, release: 0.05 }
+  });
+  const snareFilter = new Tone.Filter(3000, 'bandpass').toDestination();
+  snare.connect(snareFilter);
+
+  // Timpani
+  timpani = new Tone.MembraneSynth({
+    pitchDecay: 1.2, octaves: 6,
+    envelope: { attack: 0.001, decay: 1.2, sustain: 0.1, release: 0.5 }
+  }).toDestination();
+  timpani.volume.value = -6;
+
+  // Bass/cello
+  bass = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.05, decay: 0.3, sustain: 0.7, release: 0.4 },
+    filter: { type: 'lowpass', frequency: 400, Q: 2 },
+  }).toDestination();
+  bass.volume.value = -8;
+
+  // French horn
+  horn = new Tone.Synth({
+    oscillator: { type: 'triangle', detune: 8 },
+    envelope: { attack: 0.08, decay: 0.3, sustain: 0.7, release: 0.6 },
+  });
+  horn.connect(reverb);
+  horn.volume.value = -4;
+
+  // Strings / pad
+  strings = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.4, decay: 0.5, sustain: 0.8, release: 1.0 },
+  });
+  strings.connect(reverb);
+  strings.volume.value = -10;
+
+  // Piccolo
+  piccolo = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.08 },
+  }).toDestination();
+  piccolo.volume.value = -6;
+
+  // Tuba (for death)
+  tubaSynth = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.05, decay: 0.5, sustain: 0.6, release: 0.8 },
+  }).toDestination();
+  tubaSynth.volume.value = -8;
+
+  // Water ambient noise
+  waterNoise = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.5, decay: Infinity, sustain: 1, release: 0.5 },
+  });
+  const waterFilter = new Tone.Filter(800, 'lowpass').toDestination();
+  waterNoise.connect(waterFilter);
+  waterNoise.volume.value = -22;
+
+  // Charge noise
+  chargeNoise = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.1, decay: Infinity, sustain: 1, release: 0.2 },
+  });
+  const chargeFilter = new Tone.Filter(2000, 'highpass').toDestination();
+  chargeNoise.connect(chargeFilter);
+  chargeNoise.volume.value = -40;
+
+  startBgMusic();
+}
+
+let musicState = 'start';
+let musicLoop = null;
+let beat = 0;
+
+function startBgMusic() {
+  if (musicLoop) { musicLoop.stop(); musicLoop.dispose(); }
+  beat = 0;
+  const bpm = 132;
+  Tone.Transport.bpm.value = bpm;
+  const beatDur = 60 / bpm;
+
+  musicLoop = new Tone.Loop(time => {
+    const state = musicState;
+    const b = beat % 64; // 16 bars * 4 beats
+
+    // Kick: beats 0,8,16,24... (every 8 = beats 0,2 in 4/4 feel at half-speed)
+    if (state !== 'waterfall') {
+      if (b % 8 === 0) kick.triggerAttackRelease('C1', '8n', time);
+      if (b % 8 === 4 && state === 'normal') kick.triggerAttackRelease('C1', '8n', time, 0.6);
+    }
+
+    // Snare: beats 4, 12, 20... (every 8, offset 4 = offbeat)
+    if (state === 'normal') {
+      if (b % 8 === 4) snare.triggerAttackRelease('8n', time);
+    }
+
+    // Bass walking (G major, simplified)
+    const bassNotes = ['G1','B1','D2','G1','G1','D2','B1','G1'];
+    if (state === 'normal' || state === 'danger') {
+      bass.triggerAttackRelease(bassNotes[b % 8], '8n', time, 0.7);
+    } else if (state === 'waterfall') {
+      bass.triggerAttackRelease('G1', '4n', time, 0.5);
+    }
+
+    // Horn motif (Gary Motif: G-B-D-G) every 16 beats in normal, slower in danger
+    if (state === 'normal' && (b === 0 || b === 32)) {
+      const motif = [['G3','8n'],['B3','8n'],['D4','8n'],['G4','4n']];
+      motif.forEach(([note, dur], i) => {
+        horn.triggerAttackRelease(note, dur, time + i * beatDur * 0.5, 0.8);
+      });
+    } else if (state === 'danger' && b === 0) {
+      const motifD = [['G3','4n'],['B3','4n'],['D4','2n']];
+      motifD.forEach(([note, dur], i) => {
+        horn.triggerAttackRelease(note, dur, time + i * beatDur * 1.2, 0.4);
+      });
+    }
+
+    // Strings: sustained pads
+    if (state === 'normal' && b === 0) {
+      strings.triggerAttackRelease(['G3','D4','G4'], '4n', time, 0.5);
+    } else if (state === 'danger' && b === 0) {
+      strings.triggerAttackRelease(['G3','Db4'], '4n', time, 0.3);
+    } else if (state === 'waterfall' && b === 0) {
+      strings.triggerAttackRelease(['D4','A4'], '2n', time, 0.6);
+    }
+
+    // Timpani (every 4 bars = every 16 beats in normal)
+    if (state === 'normal' && b === 16) {
+      timpani.triggerAttackRelease('C2', '4n', time, 0.7);
+    } else if (state === 'waterfall') {
+      // Roll: every 2 beats, increasing volume
+      if (b % 2 === 0) {
+        const vol = 0.3 + (world.waterfall_chargeRatio || 0) * 0.7;
+        timpani.triggerAttackRelease('G1', '8n', time, vol);
+      }
+    }
+
+    beat++;
+  }, '8n');
+
+  musicLoop.start(0);
+  Tone.Transport.start();
+}
+
+function setMusicState(state) {
+  if (musicState === state) return;
+  musicState = state;
+}
+
+function playLaneSwitch() {
+  if (!audioInit) return;
+  const synth = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.01, decay: 0.12, sustain: 0, release: 0.05 },
+  }).toDestination();
+  synth.triggerAttackRelease('A4', '16n');
+  // Transient
+  const ns = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0 },
+    filter: { type: 'bandpass', frequency: 600 }
+  }).toDestination();
+  ns.triggerAttackRelease('32n');
+  setTimeout(() => { try { synth.dispose(); ns.dispose(); } catch(e){} }, 500);
+}
+
+function playBearSlam() {
+  if (!audioInit) return;
+  const mem = new Tone.MembraneSynth({
+    pitchDecay: 0.8, octaves: 4,
+    envelope: { attack: 0.001, decay: 0.8, sustain: 0, release: 0.2 }
+  }).toDestination();
+  mem.triggerAttackRelease('G0', '4n', undefined, 0.9);
+  const ns = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0 },
+  });
+  const f = new Tone.Filter(300, 'bandpass').toDestination();
+  ns.connect(f);
+  ns.triggerAttackRelease('8n', undefined, 0.7);
+  setTimeout(() => { try { mem.dispose(); ns.dispose(); f.dispose(); } catch(e){} }, 1500);
+}
+
+function playFishingSnap() {
+  if (!audioInit) return;
+  const s1 = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0 },
+  }).toDestination();
+  s1.triggerAttackRelease('E7', '32n');
+  setTimeout(() => { try { s1.dispose(); } catch(e){} }, 300);
+}
+
+function playLeap(perfect) {
+  if (!audioInit) return;
+  const s = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.02, decay: 0.4, sustain: 0, release: 0.2 },
+  }).toDestination();
+  s.triggerAttackRelease('G5', '4n');
+  const ns = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0 },
+  }).toDestination();
+  ns.triggerAttackRelease('8n');
+  if (perfect) {
+    const shimmer = new Tone.Synth({
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.1, decay: 0.6, sustain: 0.3, release: 0.4 },
+    });
+    shimmer.connect(reverb);
+    shimmer.triggerAttackRelease('A6', '4n', undefined, 0.5);
+    setTimeout(() => { try { shimmer.dispose(); } catch(e){} }, 1500);
+  }
+  setTimeout(() => { try { s.dispose(); ns.dispose(); } catch(e){} }, 1500);
+}
+
+function playHit() {
+  if (!audioInit) return;
+  const s = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0 },
+  }).toDestination();
+  s.triggerAttackRelease('D3', '16n', undefined, 0.8);
+  setTimeout(() => { try { s.dispose(); } catch(e){} }, 500);
+}
+
+function playDeath() {
+  if (!audioInit) return;
+  Tone.Transport.stop();
+  if (musicLoop) { musicLoop.stop(); }
+
+  // Death sweep
+  const s = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.01, decay: 0.8, sustain: 0, release: 0.3 },
+  });
+  s.connect(reverb);
+  s.triggerAttackRelease('B3', '2n', undefined, 0.7);
+
+  // Piccolo death wheeze
+  setTimeout(() => {
+    try {
+      const p = new Tone.Synth({
+        oscillator: { type: 'sine' },
+        envelope: { attack: 0.02, decay: 0.2, sustain: 0.1, release: 0.15 },
+      }).toDestination();
+      p.triggerAttackRelease('G5', '8n', undefined, 0.6);
+      p.triggerAttackRelease('E5', '8n', '+0.25', 0.5);
+      p.triggerAttackRelease('C5', '4n', '+0.5', 0.4);
+      // Tuba waaah
+      tubaSynth.triggerAttackRelease('G1', '2n', '+0.4', 0.6);
+      setTimeout(() => { try { p.dispose(); s.dispose(); } catch(e){} }, 3000);
+    } catch(e) {}
+  }, 500);
+}
+
+function playLevelComplete() {
+  if (!audioInit) return;
+  setMusicState('levelComplete');
+  // Brass stab
+  const chord = new Tone.PolySynth(Tone.Synth).toDestination();
+  chord.triggerAttackRelease(['G4','D5','G5'], '4n', undefined, 1.0);
+  horn.triggerAttackRelease('G5', '2n', '+0.5', 1.0);
+  timpani.triggerAttackRelease('G2', '4n', undefined, 0.9);
+  strings.triggerAttackRelease(['G3','B3','D4','G4'], '2n', '+0.25', 0.9);
+  setTimeout(() => { try { chord.dispose(); } catch(e){} }, 2000);
+}
+
+function playWin() {
+  if (!audioInit) return;
+  // Full Gary motif in augmentation
+  const motifNotes = ['G4','B4','D5','G5'];
+  motifNotes.forEach((note, i) => {
+    horn.triggerAttackRelease(note, '4n', `+${i * 0.5}`, 1.0);
+  });
+  timpani.triggerAttackRelease('G2', '1n', '+0.5', 0.9);
+  strings.triggerAttackRelease(['G3','D4','G4','B4'], '2n', '+1', 0.8);
+  piccolo.triggerAttackRelease('G6', '2n', '+2', 0.8);
+}
+
+// ─── GAME LOGIC ──────────────────────────────────────────────────────────────
+function initLevel(level) {
+  world.level = level;
+  world.levelDistance = 0;
+  world.boulderTimer = level === 1 ? 15000 : 2000; // grace period level 1
+  world.bearCooldown = 5000;
+  world.fishingTimer = 8000;
+  world.waterfallWarningActive = false;
+  world.waterfallWarningTimer = 0;
+  world.waterfallX = null;
+  world.nextWaterfallAt = computeNextWaterfall(level);
+  world.levelComplete = false;
+  world.levelCompleteTimer = 0;
+  world.waterfall_chargeRatio = 0;
+
+  // Clear obstacles
+  obstacleGroup.clear();
+  world.obstacles = [];
+
+  const cfg = LEVEL_CONFIG[level];
+  world.scrollSpeed = cfg.speed;
+  world.bearActive = cfg.bearActive;
+  world.fishingActive = cfg.fishingActive;
+
+  if (world.bearActive) {
+    bearGroup.visible = true;
+  } else {
+    bearGroup.visible = false;
+  }
+}
+
+function computeNextWaterfall(level) {
+  const cfg = LEVEL_CONFIG[level];
+  if (!cfg.waterfallDist.length) return Infinity;
+  return cfg.waterfallDist[0];
+}
+
+function resetGame() {
+  gary.lane = 1;
+  gary.targetLane = 1;
+  gary.laneProgress = 1.0;
+  gary.laneFrom = 1;
+  gary.hp = 3;
+  gary.invincible = false;
+  gary.invincibleTimer = 0;
+  gary.animTime = 0;
+  gary.bobPhase = 0;
+  gary.chargeStart = null;
+  gary.charging = false;
+  gary.jumping = false;
+  gary.jumpProgress = 0;
+  gary.dead = false;
+  gary.deathTimer = 0;
+  gary.wiggleAnim = 0;
+  gary.hitFlash = 0;
+  world.scrollX = 0;
+  world.distance = 0;
+  world.score = 0;
+  world.meterTraveled = 0;
+  world.bearState = 'idle';
+  world.bearRoarTimer = 0;
+  world.bearSwipeTimer = 0;
+  world.bearTargetLane = -1;
+  world.leaveFallParticles = [];
+  world.foamParticles = [];
+  world.causticPhase = 0;
+  initLevel(1);
+}
+
+function garyCurrentY() {
+  const fromY = laneWorldY(gary.laneFrom);
+  const toY = laneWorldY(gary.targetLane);
+  const t = Math.min(gary.laneProgress, 1.0);
+  const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+  return fromY + (toY - fromY) * ease;
+}
+
+function garyX() {
+  return -aspect + GARY_X_FRAC * aspect * 2;
+}
+
+function spawnBoulder(cluster) {
+  const cfg = LEVEL_CONFIG[world.level];
+  const isCluster = cluster && world.level >= 2;
+  const lanesUsed = [];
+
+  if (isCluster) {
+    // Pick 2 random lanes
+    const shuffled = [0,1,2].sort(() => Math.random()-0.5);
+    lanesUsed.push(shuffled[0], shuffled[1]);
+  } else {
+    lanesUsed.push(Math.floor(Math.random() * 3));
+  }
+
+  for (const lane of lanesUsed) {
+    const b = buildBoulder(lane);
+    // Stagger slightly for cluster
+    if (isCluster) b.position.x += (Math.random() - 0.5) * 0.05;
+    obstacleGroup.add(b);
+    world.obstacles.push(b);
+  }
+}
+
+function spawnFishingLine() {
+  const safeLane = Math.floor(Math.random() * 3);
+  const fl = buildFishingLine(safeLane);
+  obstacleGroup.add(fl);
+  world.obstacles.push(fl);
+}
+
+function spawnWaterfall() {
+  // A waterfall edge approaching from right
+  const a = aspect;
+  const group = new THREE.Group();
+  group.userData = { type: 'waterfall', passed: false };
+
+  // Ledge across full width
+  const ledgeGeo = new THREE.PlaneGeometry(0.01, 2.0);
+  const ledgeMat = new THREE.MeshBasicMaterial({ color: 0x7EC49A, transparent: true, opacity: 0.9 });
+  const ledgeMesh = new THREE.Mesh(ledgeGeo, ledgeMat);
+  ledgeMesh.position.z = 0.15;
+  group.add(ledgeMesh);
+
+  // Mist above
+  for (let i = 0; i < 5; i++) {
+    const mg = new THREE.PlaneGeometry(0.12, 0.35);
+    const mm = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.12 });
+    const mi = new THREE.Mesh(mg, mm);
+    mi.position.set((Math.random()-0.5)*0.3, 0.1 + i * 0.12, 0.1+i*0.02);
+    group.add(mi);
+  }
+
+  group.position.set(a + 0.3, 0, 0.1);
+  obstacleGroup.add(group);
+  world.obstacles.push(group);
+
+  // Show mist warning
+  world.waterfallX = a + 0.3;
+}
+
+let lastBearPaw = null;
+
+function triggerBearRoar() {
+  world.bearState = 'roaring';
+  world.bearRoarTimer = 1200; // 1.2s before paw
+  world.bearTargetLane = gary.lane; // target current lane at roar time
+  setMusicState('danger');
+
+  // Roar sound
+  if (audioInit) {
+    const roar = new Tone.NoiseSynth({
+      noise: { type: 'white' },
+      envelope: { attack: 0.05, decay: 0.5, sustain: 0.3, release: 0.5 },
+    });
+    const f = new Tone.Filter(300, 'lowpass').toDestination();
+    roar.connect(f);
+    roar.triggerAttackRelease('2n', undefined, 0.8);
+    setTimeout(() => { try { roar.dispose(); f.dispose(); } catch(e){} }, 2000);
+  }
+}
+
+function triggerBearSwipe() {
+  world.bearState = 'swiping';
+  world.bearSwipeTimer = 700; // 400ms swipe + 300ms retract
+
+  // Show paw effect
+  const paw = buildBearPawEffect(world.bearTargetLane);
+  obstacleGroup.add(paw);
+  world.obstacles.push(paw);
+  lastBearPaw = paw;
+
+  playBearSlam();
+}
+
+// ─── COLLISION ───────────────────────────────────────────────────────────────
+function checkCollisions() {
+  if (!hasEverActed || gary.dead || gary.jumping || gary.invincible) return;
+
+  const gx = garyX();
+  const gy = garyCurrentY();
+  const gLane = gary.lane;
+
+  for (let i = world.obstacles.length - 1; i >= 0; i--) {
+    const obs = world.obstacles[i];
+    if (!obs.parent) { world.obstacles.splice(i, 1); continue; }
+    const od = obs.userData;
+
+    if (od.type === 'boulder') {
+      const bx = obs.position.x;
+      const by = obs.position.y;
+      const dx = Math.abs(gx - bx);
+      const dy = Math.abs(gy - by);
+      if (dx < 0.09 && dy < 0.055) {
+        // Near miss scoring
+        if (!od.scored && dx < 0.14 && dx > 0.09) {
+          world.score += 10;
+          od.scored = true;
+        } else if (dx < 0.09) {
+          hitGary();
+          return;
+        }
+      } else if (!od.scored && bx < gx - 0.1) {
+        od.scored = true;
+        world.score += 10;
+      }
+    }
+
+    if (od.type === 'fishing') {
+      const fx = obs.position.x;
+      if (Math.abs(gx - fx) < 0.05) {
+        if (gLane !== od.safeLane) {
+          hitGary();
+          return;
+        } else if (!od.scored) {
+          od.scored = true;
+          world.score += 20;
+          playFishingSnap();
+        }
+      }
+    }
+
+    if (od.type === 'bearPaw') {
+      if (world.bearState === 'swiping') {
+        if (gLane === world.bearTargetLane && world.bearSwipeTimer < 400) {
+          hitGary();
+          return;
+        } else if (gLane !== world.bearTargetLane && world.bearSwipeTimer < 400 && world.bearSwipeTimer > 0) {
+          // Near miss - bear paw missed
+          if (!od.userData) od.userData = {};
+          if (!od.userData.nearMissScored) {
+            od.userData.nearMissScored = true;
+            world.score += 25;
+            setMusicState('normal');
+          }
+        }
+      }
+    }
+
+    if (od.type === 'waterfall') {
+      const wx = obs.position.x;
+      if (wx < gx + 0.02 && !gary.jumping) {
+        if (!od.passed) {
+          od.passed = true;
+          // Gary hits waterfall without jumping - damage
+          hitGary();
+          // Push back
+          world.levelDistance = Math.max(0, world.levelDistance - 20);
+        }
+      } else if (wx < gx - 0.2) {
+        // Passed
+        if (!od.passed) {
+          od.passed = true;
+          world.score += 100;
+        }
+        obstacleGroup.remove(obs);
+        world.obstacles.splice(i, 1);
+      }
+    }
+  }
+}
+
+function hitGary() {
+  if (gary.invincible || gary.dead) return;
+  gary.hp--;
+  gary.invincible = true;
+  gary.invincibleTimer = 1200;
+  gary.hitFlash = 0.4;
+  playHit();
+
+  if (gary.hp <= 0) {
+    killGary();
+  }
+}
+
+function killGary() {
+  gary.dead = true;
+  gary.deathTimer = 3000;
+  gameState = 'dead';
+  playDeath();
+}
+
+// ─── WATERFALL LOGIC ─────────────────────────────────────────────────────────
+function checkWaterfallSpawn() {
+  const cfg = LEVEL_CONFIG[world.level];
+  const wds = cfg.waterfallDist;
+  for (const wd of wds) {
+    if (world.levelDistance >= wd - 50 && world.levelDistance < wd - 48) {
+      // Start warning
+      world.waterfallWarningActive = true;
+      world.waterfallWarningTimer = 3000;
+      setMusicState('waterfall');
+    }
+    if (world.levelDistance >= wd && world.levelDistance < wd + 2) {
+      spawnWaterfall();
+    }
+  }
+}
+
+function checkLevelComplete() {
+  const cfg = LEVEL_CONFIG[world.level];
+  if (world.levelDistance >= cfg.distance) {
+    if (!world.levelComplete) {
+      world.levelComplete = true;
+      world.levelCompleteTimer = 3000;
+      world.score += 1000;
+      playLevelComplete();
+    }
+  }
+}
+
+// ─── LEAP LOGIC ──────────────────────────────────────────────────────────────
+function releaseLeap() {
+  if (!gary.charging) return;
+  const now = performance.now();
+  const held = now - gary.chargeStart;
+  gary.charging = false;
+  gary.chargeStart = null;
+  world.waterfall_chargeRatio = 0;
+
+  if (held < CHARGE_MIN) {
+    // Aborted lunge
+    gary.wiggleAnim = 0.3;
+    world.levelDistance = Math.max(0, world.levelDistance - 0.5);
+    return;
+  }
+
+  let perfect = false;
+  if (held >= CHARGE_OPTIMAL_MIN && held <= CHARGE_OPTIMAL_MAX) {
+    perfect = true;
+    world.score += 500;
+  } else if (held > CHARGE_MAX) {
+    // Overcharged - belly flop (still works)
+    gary.wiggleAnim = 0.5;
+  }
+
+  gary.jumping = true;
+  gary.jumpProgress = 0;
+  setMusicState('normal');
+  playLeap(perfect);
+
+  // Clear waterfall obstacle
+  for (let i = world.obstacles.length - 1; i >= 0; i--) {
+    const obs = world.obstacles[i];
+    if (obs.userData.type === 'waterfall' && !obs.userData.passed) {
+      obs.userData.passed = true;
+      world.score += perfect ? 0 : 100; // 500 already added if perfect
+      obstacleGroup.remove(obs);
+      world.obstacles.splice(i, 1);
+    }
+  }
+}
+
+// ─── UPDATE LOOP ─────────────────────────────────────────────────────────────
+let lastTime = null;
+let cameraZoom = 1.0;
+
+function update(dt) {
+  if (gameState !== 'playing' && gameState !== 'dead') return;
+  const cfg = LEVEL_CONFIG[world.level] || LEVEL_CONFIG[5];
+
+  // Update Gary animation
+  gary.animTime += dt;
+  gary.bobPhase += dt * (1.0 / 2.2) * Math.PI * 2;
+  if (gary.wiggleAnim > 0) gary.wiggleAnim -= dt * 2;
+
+  // Lane switch animation
+  if (gary.laneProgress < 1.0) {
+    gary.laneProgress = Math.min(1.0, gary.laneProgress + dt / (LANE_SWITCH_MS / 1000));
+  }
+
+  // Invincibility
+  if (gary.invincible) {
+    gary.invincibleTimer -= dt * 1000;
+    gary.hitFlash = Math.max(0, gary.hitFlash - dt * 2);
+    if (gary.invincibleTimer <= 0) {
+      gary.invincible = false;
+      gary.hitFlash = 0;
+    }
+  }
+
+  // Jump update
+  if (gary.jumping) {
+    gary.jumpProgress += dt / 0.8;
+    if (gary.jumpProgress >= 1.0) {
+      gary.jumping = false;
+      gary.jumpProgress = 0;
+    }
+  }
+
+  // Charge tracking
+  if (gary.charging && gary.chargeStart) {
+    const held = performance.now() - gary.chargeStart;
+    world.waterfall_chargeRatio = Math.min(1.0, held / CHARGE_MAX);
+    if (held >= CHARGE_MAX) {
+      // Auto-release at max
+      releaseLeap();
+    }
+  }
+
+  // Death timer
+  if (gary.dead) {
+    gary.deathTimer -= dt * 1000;
+    if (gary.deathTimer <= 0) {
+      // Restart level
+      restartCurrentLevel();
+    }
+    return;
+  }
+
+  if (gameState !== 'playing') return;
+
+  // World scroll
+  if (!gary.jumping) {
+    const scrollSpeed = cfg.speed / 1000; // convert to units/s (normalized)
+    const scrollUnit = scrollSpeed * 0.002; // NDC units per second
+    world.scrollX += scrollUnit * dt;
+    world.distance += scrollUnit * dt * 500; // approx meters
+    world.levelDistance += scrollUnit * dt * 500;
+    world.meterTraveled += scrollUnit * dt * 500;
+    world.score += Math.floor(scrollUnit * dt * 500);
+  }
+
+  // Obstacle movement
+  const a = aspect;
+  const scrollDelta = (cfg.speed / 1000) * 0.002 * dt;
+
+  for (let i = world.obstacles.length - 1; i >= 0; i--) {
+    const obs = world.obstacles[i];
+    if (!obs.parent) { world.obstacles.splice(i, 1); continue; }
+    if (obs.userData.type !== 'bearPaw') {
+      obs.position.x -= scrollDelta;
+    }
+
+    // Animate lure
+    if (obs.userData.type === 'fishing') {
+      obs.userData.lurePhase += dt * (Math.PI * 2 / 1.2);
+      const lure = obs.getObjectByName('lure');
+      if (lure) {
+        lure.position.y = obs.userData.lureBase + Math.sin(obs.userData.lurePhase) * 0.015;
+      }
+    }
+
+    // Boulder warning ripple fade in (when far right)
+    if (obs.userData.type === 'boulder') {
+      const distFromGary = obs.position.x - garyX();
+      const warn = obs.getObjectByName('warning');
+      if (warn) {
+        warn.material.opacity = distFromGary > 0.25 ? 0.5 : 0;
+      }
+    }
+
+    // Bear paw sweep animation
+    if (obs.userData.type === 'bearPaw' && world.bearState === 'swiping') {
+      const swipeProgress = 1.0 - (world.bearSwipeTimer / 700);
+      const targetX = a * 0.88 - 0.3 * Math.sin(swipeProgress * Math.PI);
+      obs.position.x = a * 0.88;
+      const targetLaneY = laneWorldY(world.bearTargetLane);
+      obs.position.y = targetLaneY;
+
+      const shadow = obs.getObjectByName('shadow');
+      if (shadow) shadow.material.opacity = swipeProgress * 0.5;
+    }
+
+    // Remove off-screen
+    if (obs.position.x < -a - 0.5 && obs.userData.type !== 'bearPaw') {
+      obstacleGroup.remove(obs);
+      world.obstacles.splice(i, 1);
+    }
+  }
+
+  // Parallax for background
+  bgForest1.position.x = -(world.scrollX * 0.15) % (aspect * 0.5);
+  bgForest2.position.x = -(world.scrollX * 0.12) % (aspect * 0.5);
+  bgAutumn.position.x = -(world.scrollX * 0.08) % (aspect * 0.5);
+
+  // Ripple lines
+  for (const rl of rippleLines) {
+    rl.position.x -= scrollDelta * 1.3;
+    if (rl.position.x < -a - 0.2) {
+      rl.position.x = a + Math.random() * 0.3;
+      rl.position.y = rl.userData.baseY;
+    }
+  }
+
+  // Caustic animation
+  world.causticPhase += dt;
+  if (causticMesh) {
+    causticMesh.material.opacity = 0.04 + 0.02 * Math.sin(world.causticPhase * Math.PI * 2 / 8);
+  }
+
+  // Boulder spawn
+  world.boulderTimer -= dt * 1000;
+  if (world.boulderTimer <= 0) {
+    world.boulderTimer = cfg.boulderInterval + (Math.random() - 0.5) * 400;
+    const isCluster = world.level >= 2 && world.levelDistance > 30 && Math.random() < 0.35;
+    spawnBoulder(isCluster);
+  }
+
+  // Bear logic
+  if (world.bearActive) {
+    if (world.bearState === 'idle') {
+      world.bearCooldown -= dt * 1000;
+      if (world.bearCooldown <= 0) {
+        world.bearCooldown = 8000 + Math.random() * 2000;
+        triggerBearRoar();
+      }
+    } else if (world.bearState === 'roaring') {
+      world.bearRoarTimer -= dt * 1000;
+      if (world.bearRoarTimer <= 0) {
+        triggerBearSwipe();
+      }
+    } else if (world.bearState === 'swiping') {
+      world.bearSwipeTimer -= dt * 1000;
+      if (world.bearSwipeTimer <= 0) {
+        world.bearState = 'cooldown';
+        world.bearCooldown = 2500;
+        // Remove paw obstacle
+        if (lastBearPaw) {
+          obstacleGroup.remove(lastBearPaw);
+          const idx = world.obstacles.indexOf(lastBearPaw);
+          if (idx !== -1) world.obstacles.splice(idx, 1);
+          lastBearPaw = null;
+        }
+        setMusicState('normal');
+      }
+    } else if (world.bearState === 'cooldown') {
+      world.bearCooldown -= dt * 1000;
+      if (world.bearCooldown <= 0) {
+        world.bearState = 'idle';
+        world.bearCooldown = 8000;
+      }
+    }
+
+    // Bear body weight-shift animation
+    const bearWobble = Math.sin(gary.animTime / 3.5 * Math.PI * 2) * 0.04;
+    bearGroup.rotation.z = bearWobble;
+  }
+
+  // Fishing line spawn
+  if (world.fishingActive) {
+    world.fishingTimer -= dt * 1000;
+    if (world.fishingTimer <= 0) {
+      world.fishingTimer = 12000 + Math.random() * 2000;
+      if (world.level >= 5 && Math.random() < 0.3) {
+        // Pair
+        spawnFishingLine();
+        const fl2 = buildFishingLine(Math.floor(Math.random() * 3));
+        fl2.position.x += 0.4;
+        obstacleGroup.add(fl2);
+        world.obstacles.push(fl2);
+      } else {
+        spawnFishingLine();
+      }
+    }
+  }
+
+  // Waterfall spawn
+  checkWaterfallSpawn();
+
+  // Waterfall warning timer
+  if (world.waterfallWarningActive) {
+    world.waterfallWarningTimer -= dt * 1000;
+    if (world.waterfallWarningTimer <= 0) {
+      world.waterfallWarningActive = false;
+      for (const m of mists) m.material.opacity = 0;
+    } else {
+      const ratio = 1.0 - world.waterfallWarningTimer / 3000;
+      for (let m = 0; m < mists.length; m++) {
+        mists[m].material.opacity = ratio * 0.15 * (1 + m * 0.1);
+        mists[m].position.x = aspect - 0.1 + Math.sin(gary.animTime * 2 + m) * 0.02;
+      }
+    }
+  }
+
+  // Level complete
+  checkLevelComplete();
+
+  if (world.levelComplete) {
+    world.levelCompleteTimer -= dt * 1000;
+    if (world.levelCompleteTimer <= 0) {
+      if (world.level >= 5) {
+        gameState = 'win';
+        playWin();
+      } else {
+        initLevel(world.level + 1);
+        gameState = 'playing';
+        setMusicState('normal');
+        if (audioInit) {
+          Tone.Transport.start();
+          startBgMusic();
+        }
+      }
+    }
+    return;
+  }
+
+  // Collisions
+  checkCollisions();
+
+  // Camera zoom on bear slam
+  if (world.bearState === 'swiping' && world.bearSwipeTimer < 500 && world.bearSwipeTimer > 420) {
+    cameraZoom = 1.04;
+  } else {
+    cameraZoom += (1.0 - cameraZoom) * dt * 20;
+  }
+  camera.zoom = cameraZoom;
+  camera.updateProjectionMatrix();
+}
+
+function restartCurrentLevel() {
+  gary.dead = false;
+  gary.hp = 3;
+  gary.invincible = false;
+  gary.lane = 1;
+  gary.targetLane = 1;
+  gary.laneProgress = 1.0;
+  gary.laneFrom = 1;
+  gary.jumping = false;
+  gary.jumpProgress = 0;
+  gary.charging = false;
+  gary.chargeStart = null;
+  world.waterfall_chargeRatio = 0;
+  world.bearState = 'idle';
+  world.bearCooldown = 5000;
+  gameState = 'playing';
+  initLevel(world.level);
+  if (audioInit) {
+    setMusicState('normal');
+    startBgMusic();
+  }
+}
+
+// ─── HUD DRAW ─────────────────────────────────────────────────────────────────
+function drawHUD() {
+  hud.clearRect(0, 0, W, H);
+  if (gameState !== 'playing' && gameState !== 'dead') return;
+
+  // Hearts
+  const heartSize = Math.min(32, W * 0.04);
+  const heartX = W * 0.04;
+  const heartY = H * 0.06;
+  for (let i = 0; i < 3; i++) {
+    hud.font = `${heartSize}px serif`;
+    hud.fillStyle = i < gary.hp ? '#C0392B' : '#555555';
+    hud.globalAlpha = i < gary.hp ? 1.0 : 0.4;
+    hud.fillText('❤', heartX + i * (heartSize + 6), heartY);
+  }
+  hud.globalAlpha = 1.0;
+
+  // Score
+  hud.font = `bold clamp(14px, 3vw, 24px) Georgia, serif`;
+  hud.font = `bold ${Math.max(14, Math.min(24, W * 0.022))}px Georgia, serif`;
+  hud.fillStyle = '#F5EDD6';
+  hud.textAlign = 'right';
+  hud.fillText(`${world.score}`, W * 0.97, H * 0.07);
+
+  // Level
+  hud.textAlign = 'center';
+  hud.font = `${Math.max(13, Math.min(18, W * 0.018))}px Georgia, serif`;
+  hud.fillStyle = '#F0A500';
+  hud.fillText(`Level ${world.level}`, W * 0.5, H * 0.06);
+
+  // Distance bar
+  const cfg = LEVEL_CONFIG[world.level] || LEVEL_CONFIG[5];
+  const prog = Math.min(1.0, world.levelDistance / cfg.distance);
+  const barW = W * 0.3, barH = 6;
+  const barX = W * 0.35, barY = H * 0.08;
+  hud.fillStyle = 'rgba(245,237,214,0.2)';
+  hud.fillRect(barX, barY, barW, barH);
+  hud.fillStyle = '#7EC49A';
+  hud.fillRect(barX, barY, barW * prog, barH);
+  hud.fillStyle = 'rgba(245,237,214,0.5)';
+  hud.strokeStyle = 'rgba(245,237,214,0.3)';
+  hud.lineWidth = 1;
+  hud.strokeRect(barX, barY, barW, barH);
+
+  // Charge meter (when charging)
+  if (gary.charging && gary.chargeStart) {
+    const held = performance.now() - gary.chargeStart;
+    const ratio = Math.min(1.0, held / CHARGE_MAX);
+    const perfect = held >= CHARGE_OPTIMAL_MIN && held <= CHARGE_OPTIMAL_MAX;
+    const overcharge = held > CHARGE_MAX * 0.9;
+
+    const cx = garyX() * (W / (aspect * 2)) + W / 2;
+    const cy = (1.0 - (garyCurrentY() + 1) / 2) * H;
+    const radius = Math.min(30, W * 0.035);
+
+    hud.strokeStyle = overcharge ? '#E03030' : (perfect ? '#7EC49A' : '#F0A500');
+    hud.lineWidth = 4;
+    hud.beginPath();
+    hud.arc(cx, cy + radius * 1.8, radius, -Math.PI / 2, -Math.PI / 2 + ratio * Math.PI * 2);
+    hud.stroke();
+  }
+
+  // Hit flash overlay
+  if (gary.hitFlash > 0) {
+    hud.fillStyle = `rgba(192,57,43,${gary.hitFlash * 0.3})`;
+    hud.fillRect(0, 0, W, H);
+  }
+
+  // Bear warning
+  if (world.bearState === 'roaring') {
+    const roarRatio = 1.0 - world.bearRoarTimer / 1200;
+    hud.fillStyle = `rgba(224,48,48,${roarRatio * 0.12})`;
+    hud.fillRect(0, 0, W, H);
+    hud.font = `bold ${Math.max(14, Math.min(22, W * 0.025))}px Georgia, serif`;
+    hud.fillStyle = '#E03030';
+    hud.textAlign = 'center';
+    hud.globalAlpha = roarRatio;
+    hud.fillText('⚠ BEAR!', W * 0.5, H * 0.4);
+    hud.globalAlpha = 1.0;
+  }
+
+  // Level complete overlay
+  if (world.levelComplete) {
+    hud.fillStyle = 'rgba(28,53,32,0.7)';
+    hud.fillRect(0, 0, W, H);
+    hud.font = `bold ${Math.max(18, Math.min(40, W * 0.04))}px Georgia, serif`;
+    hud.fillStyle = '#F0A500';
+    hud.textAlign = 'center';
+    hud.fillText('LEVEL COMPLETE!', W * 0.5, H * 0.45);
+    hud.font = `${Math.max(13, Math.min(22, W * 0.02))}px Georgia, serif`;
+    hud.fillStyle = '#F5EDD6';
+    hud.fillText(`Score: ${world.score}`, W * 0.5, H * 0.55);
+  }
+
+  // Death overlay
+  if (gary.dead) {
+    hud.fillStyle = 'rgba(28,53,32,0.75)';
+    hud.fillRect(0, 0, W, H);
+    hud.font = `bold ${Math.max(20, Math.min(44, W * 0.05))}px Georgia, serif`;
+    hud.fillStyle = '#C0392B';
+    hud.textAlign = 'center';
+    hud.fillText('GARY DOWN.', W * 0.5, H * 0.43);
+    hud.font = `${Math.max(13, Math.min(20, W * 0.02))}px Georgia, serif`;
+    hud.fillStyle = '#F5EDD6';
+    hud.fillText('He will try again.', W * 0.5, H * 0.52);
+  }
+
+  // Win screen
+  if (gameState === 'win') {
+    hud.fillStyle = 'rgba(28,53,32,0.8)';
+    hud.fillRect(0, 0, W, H);
+    hud.font = `bold ${Math.max(20, Math.min(44, W * 0.05))}px Georgia, serif`;
+    hud.fillStyle = '#F0A500';
+    hud.textAlign = 'center';
+    hud.fillText('GARY MADE IT.', W * 0.5, H * 0.38);
+    hud.font = `${Math.max(14, Math.min(24, W * 0.022))}px Georgia, serif`;
+    hud.fillStyle = '#F5EDD6';
+    hud.fillText('He nods. Once.', W * 0.5, H * 0.48);
+    hud.font = `${Math.max(13, Math.min(20, W * 0.019))}px Georgia, serif`;
+    hud.fillStyle = '#7EC49A';
+    hud.fillText(`Final Score: ${world.score}`, W * 0.5, H * 0.58);
+    hud.font = `${Math.max(13, Math.min(17, W * 0.016))}px Georgia, serif`;
+    hud.fillStyle = '#F5EDD6';
+    hud.fillText('Tap to play again', W * 0.5, H * 0.68);
+  }
+
+  // Waterfall warning
+  if (world.waterfallWarningActive) {
+    hud.font = `bold ${Math.max(13, Math.min(20, W * 0.02))}px Georgia, serif`;
+    hud.fillStyle = '#7EC49A';
+    hud.textAlign = 'center';
+    hud.globalAlpha = 0.5 + 0.5 * Math.sin(performance.now() * 0.006);
+    hud.fillText('WATERFALL AHEAD — HOLD TO CHARGE', W * 0.5, H * 0.9);
+    hud.globalAlpha = 1.0;
+  }
+}
+
+// ─── GARY RENDER (3D) ────────────────────────────────────────────────────────
+function updateGaryTransform() {
+  const x = garyX();
+  const y = garyCurrentY();
+  const bob = Math.sin(gary.bobPhase) * 0.006;
+
+  // Jump arc
+  let jumpY = 0;
+  if (gary.jumping) {
+    jumpY = Math.sin(gary.jumpProgress * Math.PI) * 0.35;
+  }
+
+  garyGroup.position.x = x;
+  garyGroup.position.y = y + bob + jumpY;
+  garyGroup.position.z = 0.5;
+
+  // Swimming body S-curve - tail angle
+  const tailAngle = Math.sin(gary.animTime * (Math.PI * 2) / 0.5) * (22 * Math.PI / 180);
+  const body = garyGroup.getObjectByName('body');
+  const tail = garyGroup.getObjectByName('tail');
+  const dorsal = garyGroup.getObjectByName('dorsal');
+
+  // Lane switch lean
+  if (gary.laneProgress < 1.0) {
+    const fromY = laneWorldY(gary.laneFrom), toY = laneWorldY(gary.targetLane);
+    const dir = toY > fromY ? 1 : -1;
+    garyGroup.rotation.z = dir * 12 * Math.PI / 180 * (1.0 - gary.laneProgress);
+  } else {
+    garyGroup.rotation.z += (0 - garyGroup.rotation.z) * 0.15;
+  }
+
+  // Tail oscillation
+  if (tail) {
+    tail.rotation.z = tailAngle;
+    tail.position.x = 0.072 + Math.abs(Math.sin(gary.animTime * Math.PI * 2 / 0.5)) * 0.004;
+  }
+
+  // Wiggle on failed charge
+  if (gary.wiggleAnim > 0) {
+    garyGroup.rotation.z = Math.sin(gary.animTime * 30) * gary.wiggleAnim * 0.3;
+  }
+
+  // Hit flash - red tint
+  if (gary.hitFlash > 0) {
+    const bodies = ['body','head','belly','stripe'];
+    for (const name of bodies) {
+      const m = garyGroup.getObjectByName(name);
+      if (m) {
+        m.material.color.setHex(0xFF3333);
+      }
+    }
+  } else if (!gary.dead) {
+    const bodyMesh = garyGroup.getObjectByName('body');
+    if (bodyMesh) bodyMesh.material.color.setHex(0xC0392B);
+    const headMesh = garyGroup.getObjectByName('head');
+    if (headMesh) headMesh.material.color.setHex(0xC0392B);
+  }
+
+  // Invincible flicker
+  if (gary.invincible) {
+    garyGroup.visible = (Math.floor(gary.invincibleTimer / 120) % 2 === 0);
+  } else {
+    garyGroup.visible = true;
+  }
+
+  // Jumping arch
+  if (gary.jumping) {
+    garyGroup.rotation.z = Math.sin(gary.jumpProgress * Math.PI) * 0.3;
+  }
+
+  // Charge eyes-wide effect
+  if (gary.charging && gary.chargeStart) {
+    const eyeW = garyGroup.getObjectByName('eyeWhite');
+    if (eyeW) {
+      const held = performance.now() - gary.chargeStart;
+      const ratio = Math.min(1.0, held / CHARGE_OPTIMAL_MIN);
+      eyeW.scale.set(1 + ratio * 0.3, 1 + ratio * 0.3, 1);
+    }
+  } else {
+    const eyeW = garyGroup.getObjectByName('eyeWhite');
+    if (eyeW) eyeW.scale.set(1, 1, 1);
+  }
+
+  // Pectoral fin oscillation
+  const pec = garyGroup.getObjectByName('pectoral');
+  if (pec) {
+    pec.rotation.z = Math.sin(gary.animTime * Math.PI * 2 / 0.25 + Math.PI) * 0.2;
+  }
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+function render(timestamp) {
+  requestAnimationFrame(render);
+  const dt = lastTime ? Math.min((timestamp - lastTime) / 1000, 0.1) : 0.016;
+  lastTime = timestamp;
+
+  update(dt);
+  updateGaryTransform();
+  composer.render();
+  drawHUD();
+}
+
+// ─── INPUT ───────────────────────────────────────────────────────────────────
+let pointerDownX = null, pointerDownY = null;
+let pointerDownTime = null;
+let isPointerDown = false;
+let pointerDownSide = null; // 'left'|'right'|'hold'
+
+document.addEventListener('pointerdown', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  pointerDownX = px;
+  pointerDownY = py;
+  pointerDownTime = performance.now();
+  isPointerDown = true;
+
+  if (gameState === 'playing') {
+    // Determine side
+    const midX = rect.width / 2;
+    if (Math.abs(px - midX) < rect.width * 0.2) {
+      // Center hold zone
+      pointerDownSide = 'hold';
+      gary.charging = true;
+      gary.chargeStart = performance.now();
+      if (audioInit) {
+        try { chargeNoise.triggerAttack(); } catch(e_){}
+      }
+    } else {
+      pointerDownSide = px < midX ? 'left' : 'right';
+    }
+  }
+
+  if (gameState === 'win') {
+    resetGame();
+    gameState = 'playing';
+    hasEverActed = true;
+    if (audioInit) { setMusicState('normal'); startBgMusic(); }
+  }
+}, true);
+
+document.addEventListener('pointerup', (e) => {
+  if (!isPointerDown) return;
+  isPointerDown = false;
+
+  const rect = canvas.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  const dx = px - pointerDownX;
+  const dy = py - pointerDownY;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const duration = performance.now() - pointerDownTime;
+
+  if (gameState === 'playing') {
+    if (gary.charging) {
+      gary.charging = false;
+      if (audioInit) { try { chargeNoise.triggerRelease(); } catch(e_){} }
+      releaseLeap();
+    } else if (pointerDownSide === 'left' || (dist < 30 && px < rect.width / 2)) {
+      switchLane(-1);
+    } else if (pointerDownSide === 'right' || (dist < 30 && px >= rect.width / 2)) {
+      switchLane(1);
+    }
+  }
+
+  pointerDownSide = null;
+}, true);
+
+document.addEventListener('pointermove', (e) => {
+  // Nothing needed
+}, true);
+
+function switchLane(dir) {
+  const newLane = Math.max(0, Math.min(LANE_COUNT - 1, gary.lane + dir));
+  if (newLane === gary.lane) {
+    // Edge wiggle
+    gary.wiggleAnim = 0.2;
+    return;
+  }
+  hasEverActed = true;
+  gary.laneFrom = gary.lane;
+  gary.lane = newLane;
+  gary.targetLane = newLane;
+  gary.laneProgress = 0;
+  playLaneSwitch();
+}
+
+// ─── OVERLAY TAP HANDLING ────────────────────────────────────────────────────
+const overlay = document.getElementById('overlay');
+const instrOverlay = document.getElementById('instrOverlay');
+
+overlay.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  if (gameState !== 'start') return;
+  initAudio().catch(() => {});
+  overlay.classList.add('hidden');
+  instrOverlay.classList.add('visible');
+  gameState = 'instructions';
+}, true);
+
+instrOverlay.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  if (gameState !== 'instructions') return;
+  instrOverlay.style.transition = 'opacity 0.3s ease';
+  instrOverlay.style.opacity = '0';
+  instrOverlay.style.pointerEvents = 'none';
+  setTimeout(() => { instrOverlay.classList.remove('visible'); }, 300);
+  resetGame();
+  gameState = 'playing';
+  hasEverActed = false;
+  if (audioInit) { setMusicState('normal'); startBgMusic(); }
+}, true);
+
+// ─── START ───────────────────────────────────────────────────────────────────
+window.addEventListener('resize', resize);
+resize();
+resetGame();
+render(0);
+</script>
+</body>
+</html>
