@@ -202,6 +202,9 @@ let gary = {
   hitFlash: 0,
 };
 
+// Score accumulator for fractional points
+let scoreAccum = 0;
+
 // World state
 let world = {
   scrollX: 0,
@@ -1037,6 +1040,7 @@ function resetGame() {
   world.distance = 0;
   world.score = 0;
   world.meterTraveled = 0;
+  scoreAccum = 0;
   world.bearState = 'idle';
   world.bearRoarTimer = 0;
   world.bearSwipeTimer = 0;
@@ -1394,10 +1398,15 @@ function update(dt) {
     const scrollSpeed = cfg.speed / 1000; // convert to units/s (normalized)
     const scrollUnit = scrollSpeed * 0.002; // NDC units per second
     world.scrollX += scrollUnit * dt;
-    world.distance += scrollUnit * dt * 500; // approx meters
-    world.levelDistance += scrollUnit * dt * 500;
-    world.meterTraveled += scrollUnit * dt * 500;
-    world.score += Math.floor(scrollUnit * dt * 500);
+    const metersThisFrame = scrollUnit * dt * 500;
+    world.distance += metersThisFrame;
+    world.levelDistance += metersThisFrame;
+    world.meterTraveled += metersThisFrame;
+    scoreAccum += metersThisFrame;
+    if (scoreAccum >= 1) {
+      world.score += Math.floor(scoreAccum);
+      scoreAccum -= Math.floor(scoreAccum);
+    }
   }
 
   // Obstacle movement
