@@ -9,7 +9,7 @@
 html, body { width: 100%; height: 100%; overflow: hidden; background: #3D7A52; }
 canvas#gameCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
 canvas#hudCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-#overlay {
+#startScreen {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: rgba(28, 53, 32, 0.85);
@@ -17,7 +17,7 @@ canvas#hudCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
   cursor: pointer;
   transition: opacity 0.3s ease;
 }
-#overlay.hidden { opacity: 0; pointer-events: none; }
+#startScreen.hidden { opacity: 0; pointer-events: none; }
 #instrOverlay {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -85,7 +85,7 @@ canvas#hudCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
 <canvas id="hudCanvas"></canvas>
 
 <!-- Start Screen -->
-<div id="overlay">
+<div id="startScreen">
   <svg width="320" height="160" viewBox="0 0 320 160" style="overflow:visible;margin-bottom:10px">
     <defs>
       <filter id="glow-inner">
@@ -1933,7 +1933,7 @@ function switchLane(dir) {
 }
 
 // ─── OVERLAY TAP HANDLING ────────────────────────────────────────────────────
-const overlay = document.getElementById('overlay');
+const overlay = document.getElementById('startScreen');
 const instrOverlay = document.getElementById('instrOverlay');
 
 overlay.addEventListener('pointerdown', (e) => {
