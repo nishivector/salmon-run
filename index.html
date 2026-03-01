@@ -1393,25 +1393,29 @@ function update(dt) {
 
   if (gameState !== 'playing') return;
 
-  // World scroll
+  // World scroll - convert px/s at 1920px to NDC/s
+  // At 1920px canvas: 1920px = 2*aspect NDC, so 1px = 2*aspect/1920 NDC
+  const NDC_PER_PX = 2 * aspect / 1920;
+  const scrollNDC = cfg.speed * NDC_PER_PX; // NDC per second
+
   if (!gary.jumping) {
-    const scrollSpeed = cfg.speed / 1000; // convert to units/s (normalized)
-    const scrollUnit = scrollSpeed * 0.002; // NDC units per second
-    world.scrollX += scrollUnit * dt;
-    const metersThisFrame = scrollUnit * dt * 500;
+    world.scrollX += scrollNDC * dt;
+    // Scale: 280px/s scroll = 4.375m/s (30m per screen width at 1920px)
+    const METERS_PER_PX = 30 / 1920;
+    const metersThisFrame = cfg.speed * METERS_PER_PX * dt;
     world.distance += metersThisFrame;
     world.levelDistance += metersThisFrame;
     world.meterTraveled += metersThisFrame;
-    scoreAccum += metersThisFrame;
+    scoreAccum += metersThisFrame; // 1 point per meter
     if (scoreAccum >= 1) {
       world.score += Math.floor(scoreAccum);
       scoreAccum -= Math.floor(scoreAccum);
     }
   }
 
-  // Obstacle movement
+  // Obstacle movement - same NDC speed
   const a = aspect;
-  const scrollDelta = (cfg.speed / 1000) * 0.002 * dt;
+  const scrollDelta = scrollNDC * dt;
 
   for (let i = world.obstacles.length - 1; i >= 0; i--) {
     const obs = world.obstacles[i];
@@ -1457,10 +1461,19 @@ function update(dt) {
     }
   }
 
-  // Parallax for background
-  bgForest1.position.x = -(world.scrollX * 0.15) % (aspect * 0.5);
-  bgForest2.position.x = -(world.scrollX * 0.12) % (aspect * 0.5);
-  bgAutumn.position.x = -(world.scrollX * 0.08) % (aspect * 0.5);
+  // Parallax for background - wrap each tree tile
+  for (const child of bgForest1.children) {
+    child.position.x -= scrollDelta * 0.15;
+    if (child.position.x < -a - 0.3) child.position.x += a * 2 + 0.3;
+  }
+  for (const child of bgForest2.children) {
+    child.position.x -= scrollDelta * 0.12;
+    if (child.position.x < -a - 0.3) child.position.x += a * 2 + 0.3;
+  }
+  for (const child of bgAutumn.children) {
+    child.position.x -= scrollDelta * 0.08;
+    if (child.position.x < -a - 0.3) child.position.x += a * 2 + 0.3;
+  }
 
   // Ripple lines
   for (const rl of rippleLines) {
